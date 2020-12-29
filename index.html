@@ -145,17 +145,6 @@ function printAnalysis (dealtCards) {
 	}
 
 	print(`Chance of winning: ${asPercent(odds.chanceOfPlayerWin)}`);
-
-	if (dealtCards.length === 0) {
-		print("Click the cards you've been dealt.");
-		if (odds.chanceOfPlayerWin > 0.5) {
-			print("Current recommendation: HIT");
-		} else {
-			print("Current recommendation: GO away and solve a mystery.");
-		}
-		return;
-	}
-
 	print(`Current score: ${score}`);
 
 	if (odds.chanceOfPlayerWin === 0) {
@@ -170,9 +159,14 @@ function printAnalysis (dealtCards) {
 	print(`Chance of winning if you hit: ${asPercent(odds.chanceOnHit)}`);
 
 	if (odds.chanceOnHit > odds.chanceOnStand) {
-		print(`Recommendation: HIT`);
+		if (dealtCards.length === 0 && odds.chanceOfPlayerWin < 0.5) {
+			print("Recommendation: GO away and solve a mystery.");
+			print("Or, click the cards you've been dealt.");
+		} else {
+			print("Recommendation: HIT");
+		}
 	} else {
-		print(`Recommendation: STAND`);
+		print("Recommendation: STAND");
 	}
 }
 
