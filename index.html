@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html>
+<head lang="en-US">
+	<meta charset="utf-8">
+	<title>Happy Duck Helper</title>
+	<style>
+		#board {
+			display: flex;
+			flex-wrap: wrap;
+		}
+
+		.card {
+			font-size: 2em;
+			display: grid;
+			border: thin solid black;
+			border-radius: 0.5em;
+			margin: 0.1em;
+			width: 2em;
+			height: 3em;
+			justify-content: center;
+			align-items: center;
+		}
+
+		.card.dealt {
+			background-color: lightgrey;
+		}
+
+		.fixed-bottom {
+			position: fixed;
+			bottom: 0;
+			padding: 0.2em;
+		}
+	</style>
+</head>
+<body>
+	<div id="board"></div>
+	<pre id="output"></pre>
+<script>
+const INITIAL_DECK = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+const PROBABILITY_CACHE = {};
+
+/**
+ * Builds the UI and heats up the probability cache.
+ */
+function main () {
+	addSugar();
+
+	print("Analyzing probabilities. Please wait...");
+
+	// Compute the win probability of the initial state, to hydrate the cache.
+	// There are only ~6.9k nontrivial states, so this shouldn't take long.
+	// In fact, on my machine it's so fast I can't see the loading message.
+	computeOdds(INITIAL_DECK, 0, false, 0);
+
+	const board = document.getElementById("board");
+	INITIAL_DECK.forEach(value => board.appendChild(createCardElement(value)));
+
+	printAnalysis([]);
+}
+
+/**
+ * Computes the probability of a player win, given optimal strategy.
+ * Uses a string-keyed cache for efficiency.
+ *
+ * @param {array} deck - The cards not yet dealt. Must be sorted.
+ * @param {number} playerScore - The sum of the cards dealt to the player
+ * @param {boolean} isDealerTurn - True if the player has chosen to Stand
+ * @param {number} dealerScore - The sum of the cards dealt to the dealer
+ */
+function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
+	// First, account for end states
+	if (playerScore === 21) return 1;
+	if (playerScore > 21) return 0;
+	if (dealerScore > 21) return 1;
+	if (dealerScore > playerScore) return 0;
+
+	// Next, check the cache.
+	const gameStateKey = JSON.stringify({ deck, playerScore, isDealerTurn, dealerScore });
+	let odds = PROBABILITY_CACHE[gameStateKey];
+	if (typeof odds === "number") {
+		return odds;
+	}
+
+	// Okay then, let's compute.
+	if (isDealerTurn) {
+		// Since we are not in an end state, and the player has already chosen
+		// to stand, we know the dealer will hit
+		odds = deck
+			.map(value => computeOdds(deck.without(value), playerScore, isDealerTurn, dealerScore + value))
+			.average();
+	} else {
+		// Now we must consider two options: player hits, or player stands.
+		const oddsIfStanding = computeOdds(deck, playerScore, true, dealerScore);
+
+		const oddsIfHitting = deck
+			.map(value => computeOdds(deck.without(value), playerScore + value, isDealerTurn, dealerScore))
+			.average();
+
+		// The optimal player chooses the better option
+		odds = Math.max(oddsIfStanding, oddsIfHitting);
+	}
+
+	PROBABILITY_CACHE[gameStateKey] = odds;
+	return odds;
+}
+
+/**
+ * Prints statistics about the current game. Recommends a decision.
+ */
+function printAnalysis (dealtCards) {
+	clearScreen();
+
+	const score = dealtCards.sum();
+	const deck = INITIAL_DECK.filter(val => !dealtCards.includes(val));
+	const chanceOfWinningWithPerfectPlay = computeOdds(deck, score, false, 0);
+	const chanceOfWinningOnStand = computeOdds(deck, score, true, 0);
+	const chanceOfBustingOnHit = deck
+		.map(value => score + value > 21 ? 1 : 0)
+		.average();
+	const chanceOfWinningOnHit = deck
+		.map(value => computeOdds(deck.without(value), score + value, false, 0))
+		.average();
+
+	function asPercent(probability) {
+		return Math.round(10000 * probability) / 100 + "%";
+	}
+
+	print(`Chance of winning: ${asPercent(chanceOfWinningWithPerfectPlay)}`);
+
+	if (dealtCards.length === 0) {
+		print("Click the cards you've been dealt.");
+		if (chanceOfWinningWithPerfectPlay > 0.5) {
+			print("Current recommendation: HIT");
+		} else {
+			print("Current recommendation: GO away and solve a mystery.");
+		}
+		return;
+	}
+
+	print(`Current score: ${score}`);
+
+	if (chanceOfWinningWithPerfectPlay === 0) {
+		print("Better luck next time.");
+		return;
+	} else if (score === 21) {
+		print("That's a win!");
+		return;
+	}
+
+	print(`Chance of winning if you stand: ${asPercent(chanceOfWinningOnStand)}`);
+	print(`Chance of busting immediately if you hit: ${asPercent(chanceOfBustingOnHit)}`);
+	print(`Chance of winning if you hit: ${asPercent(chanceOfWinningOnHit)}`);
+
+	if (chanceOfWinningOnHit > chanceOfWinningOnStand) {
+		print(`Recommendation: HIT`);
+	} else {
+		print(`Recommendation: STAND`);
+	}
+}
+
+/**
+ * Creates an HTML element to represent a playing card.
+ * Stores the card's value in the data-value attribute.
+ */
+function createCardElement (value) {
+	const card = document.createElement("div");
+	card.classList.add("card");
+	card.dataset.value = value;
+	card.textContent = value;
+	card.addEventListener("click", handleCardClick);
+	return card;
+}
+
+/** Triggers analysis and advice. */
+function handleCardClick () {
+	this.classList.toggle("dealt");
+
+	const dealtCards = Array.from(document.querySelectorAll(".card.dealt"))
+		.map(card => parseInt(card.dataset.value));
+
+	printAnalysis(dealtCards);
+}
+
+/** Writes a message to the output area. */
+function print (message) {
+	document.getElementById("output").textContent += message + "\n";
+}
+
+/** Wipes the output area. */
+function clearScreen () {
+	document.getElementById("output").textContent = "";
+}
+
+/** Add some sweet methods to Arrays. */
+function addSugar () {
+	if (!Array.prototype.without) {
+		Object.defineProperty(Array.prototype, 'without', {
+			value: function(val) {
+				return this.filter(v => v !== val);
+			}
+		});
+	}
+
+	if (!Array.prototype.sum) {
+		Object.defineProperty(Array.prototype, 'sum', {
+			value: function() {
+				return this.reduce((sum, v) => sum + v, 0);
+			}
+		});
+	}
+
+	if (!Array.prototype.average) {
+		Object.defineProperty(Array.prototype, 'average', {
+			value: function() {
+				return this.sum() / this.length;
+			}
+		});
+	}
+}
+
+main();
+</script>
+<footer class="fixed-bottom">
+	<a href="https://twitter.com/aviaryattorney/status/586624924149817344">Why?</a>
+	And
+	<a href="https://github.com/benj2240/happy-duck-helper">how?</a>
+</footer>
+</body>
+</html>
