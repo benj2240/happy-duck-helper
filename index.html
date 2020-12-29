@@ -7,7 +7,7 @@
 		body {
 			font-size: 2em;
 		}
-		
+
 		#board {
 			display: flex;
 			flex-wrap: wrap;
@@ -72,18 +72,20 @@ function main () {
  * @param {number} playerScore - The sum of the cards dealt to the player
  * @param {boolean} isDealerTurn - True if the player has chosen to Stand
  * @param {number} dealerScore - The sum of the cards dealt to the dealer
+ * @returns {object} - An "Odds" object. Always has property chanceOfPlayerWin,
+ *     also has chanceOnHit and chanceOnStand if they are meaningful.
  */
 function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 	// First, account for end states
-	if (playerScore === 21) return 1;
-	if (playerScore > 21) return 0;
-	if (dealerScore > 21) return 1;
-	if (dealerScore > playerScore) return 0;
+	if (playerScore === 21) return { chanceOfPlayerWin: 1 };
+	if (playerScore > 21) return { chanceOfPlayerWin: 0 };
+	if (dealerScore > 21) return { chanceOfPlayerWin: 1 };
+	if (dealerScore > playerScore) return { chanceOfPlayerWin: 0 };
 
 	// Next, check the cache.
 	const gameStateKey = JSON.stringify({ deck, playerScore, isDealerTurn, dealerScore });
 	let odds = PROBABILITY_CACHE[gameStateKey];
-	if (typeof odds === "number") {
+	if (typeof odds === "object") {
 		return odds;
 	}
 
@@ -91,19 +93,27 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 	if (isDealerTurn) {
 		// Since we are not in an end state, and the player has already chosen
 		// to stand, we know the dealer will hit
-		odds = deck
+		let chanceOfPlayerWin = deck
 			.map(value => computeOdds(deck.without(value), playerScore, isDealerTurn, dealerScore + value))
+			.map(odds => odds.chanceOfPlayerWin)
 			.average();
+
+		odds = { chanceOfPlayerWin };
 	} else {
 		// Now we must consider two options: player hits, or player stands.
-		const oddsIfStanding = computeOdds(deck, playerScore, true, dealerScore);
+		const chanceOnStand = computeOdds(deck, playerScore, true, dealerScore).chanceOfPlayerWin;
 
-		const oddsIfHitting = deck
+		const chanceOnHit = deck
 			.map(value => computeOdds(deck.without(value), playerScore + value, isDealerTurn, dealerScore))
+			.map(odds => odds.chanceOfPlayerWin)
 			.average();
 
 		// The optimal player chooses the better option
-		odds = Math.max(oddsIfStanding, oddsIfHitting);
+		odds = {
+			chanceOfPlayerWin: Math.max(chanceOnStand, chanceOnHit),
+			chanceOnStand,
+			chanceOnHit
+		};
 	}
 
 	PROBABILITY_CACHE[gameStateKey] = odds;
@@ -112,30 +122,33 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 
 /**
  * Prints statistics about the current game. Recommends a decision.
+ * The recommendations can be summed up like this:
+ *   This is a losing game so avoid it if possible. If not,
+ *     Always hit on 14 or less.
+ *     With 15 points, hit if your highest card is 7 or greater
+ *     With 16 points, hit if you have any of these sets:
+ *       [1,2,6,7], [1,7,8], [1,6,9], [2,6,8], [7,9], [6,10]
+ *     Always stand on 17 or more.
+ * 
+ *
+ * @param {array} dealtCards - the values the player has been dealt
  */
 function printAnalysis (dealtCards) {
 	clearScreen();
 
 	const score = dealtCards.sum();
 	const deck = INITIAL_DECK.filter(val => !dealtCards.includes(val));
-	const chanceOfWinningWithPerfectPlay = computeOdds(deck, score, false, 0);
-	const chanceOfWinningOnStand = computeOdds(deck, score, true, 0);
-	const chanceOfBustingOnHit = deck
-		.map(value => score + value > 21 ? 1 : 0)
-		.average();
-	const chanceOfWinningOnHit = deck
-		.map(value => computeOdds(deck.without(value), score + value, false, 0))
-		.average();
+	const odds = computeOdds(deck, score, false, 0);
 
 	function asPercent(probability) {
 		return Math.round(10000 * probability) / 100 + "%";
 	}
 
-	print(`Chance of winning: ${asPercent(chanceOfWinningWithPerfectPlay)}`);
+	print(`Chance of winning: ${asPercent(odds.chanceOfPlayerWin)}`);
 
 	if (dealtCards.length === 0) {
 		print("Click the cards you've been dealt.");
-		if (chanceOfWinningWithPerfectPlay > 0.5) {
+		if (odds.chanceOfPlayerWin > 0.5) {
 			print("Current recommendation: HIT");
 		} else {
 			print("Current recommendation: GO away and solve a mystery.");
@@ -145,19 +158,18 @@ function printAnalysis (dealtCards) {
 
 	print(`Current score: ${score}`);
 
-	if (chanceOfWinningWithPerfectPlay === 0) {
+	if (odds.chanceOfPlayerWin === 0) {
 		print("Better luck next time.");
 		return;
-	} else if (score === 21) {
+	} else if (odds.chanceOfPlayerWin === 1) {
 		print("That's a win!");
 		return;
 	}
 
-	print(`Chance of winning if you stand: ${asPercent(chanceOfWinningOnStand)}`);
-	print(`Chance of busting immediately if you hit: ${asPercent(chanceOfBustingOnHit)}`);
-	print(`Chance of winning if you hit: ${asPercent(chanceOfWinningOnHit)}`);
+	print(`Chance of winning if you stand: ${asPercent(odds.chanceOnStand)}`);
+	print(`Chance of winning if you hit: ${asPercent(odds.chanceOnHit)}`);
 
-	if (chanceOfWinningOnHit > chanceOfWinningOnStand) {
+	if (odds.chanceOnHit > odds.chanceOnStand) {
 		print(`Recommendation: HIT`);
 	} else {
 		print(`Recommendation: STAND`);
