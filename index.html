@@ -101,7 +101,7 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 		odds = { chanceOfPlayerWin };
 	} else {
 		// Now we must consider two options: player hits, or player stands.
-		const chanceOnStand = computeOdds(deck, playerScore, true, dealerScore).chanceOfPlayerWin;
+		const chanceOnStand = computeOdds(INITIAL_DECK, playerScore, true, dealerScore).chanceOfPlayerWin;
 
 		const chanceOnHit = deck
 			.map(value => computeOdds(deck.without(value), playerScore + value, isDealerTurn, dealerScore))
@@ -127,7 +127,7 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
  *     Always hit on 14 or less.
  *     With 15 points, hit if your highest card is 7 or greater
  *     With 16 points, hit if you have any of these sets:
- *       [1,2,6,7], [1,7,8], [1,6,9], [2,6,8], [7,9], [6,10]
+ *       [1,2,6,7], [1,6,9], [1,7,8], [2,6,8], [3,6,7], [6,10], [7,9]
  *     Always stand on 17 or more.
  * 
  *
