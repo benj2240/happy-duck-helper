@@ -89,10 +89,9 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 		return odds;
 	}
 
-	// Okay then, let's compute.
+	// Okay then, answer is not easy or cached. Let's compute.
 	if (isDealerTurn) {
-		// Since we are not in an end state, and the player has already chosen
-		// to stand, we know the dealer will hit
+		// If the player stands, the dealer hits until game over.
 		let chanceOfPlayerWin = deck
 			.map(value => computeOdds(deck.without(value), playerScore, isDealerTurn, dealerScore + value))
 			.map(odds => odds.chanceOfPlayerWin)
@@ -108,8 +107,8 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
 			.map(odds => odds.chanceOfPlayerWin)
 			.average();
 
-		// The optimal player chooses the better option
 		odds = {
+			// The optimal player chooses the better option
 			chanceOfPlayerWin: Math.max(chanceOnStand, chanceOnHit),
 			chanceOnStand,
 			chanceOnHit
@@ -130,7 +129,6 @@ function computeOdds(deck, playerScore, isDealerTurn, dealerScore) {
  *       [1,2,6,7], [1,6,9], [1,7,8], [2,6,8], [3,6,7], [6,10], [7,9]
  *     Always stand on 17 or more.
  * 
- *
  * @param {array} dealtCards - the values the player has been dealt
  */
 function printAnalysis (dealtCards) {
@@ -144,19 +142,8 @@ function printAnalysis (dealtCards) {
 		return Math.round(10000 * probability) / 100 + "%";
 	}
 
-	print(`Chance of winning: ${asPercent(odds.chanceOfPlayerWin)}`);
-
-	if (dealtCards.length === 0) {
-		print("Click the cards you've been dealt.");
-		if (odds.chanceOfPlayerWin > 0.5) {
-			print("Current recommendation: HIT");
-		} else {
-			print("Current recommendation: GO away and solve a mystery.");
-		}
-		return;
-	}
-
 	print(`Current score: ${score}`);
+	print(`Chance of winning: ${asPercent(odds.chanceOfPlayerWin)}`);
 
 	if (odds.chanceOfPlayerWin === 0) {
 		print("Better luck next time.");
@@ -169,10 +156,17 @@ function printAnalysis (dealtCards) {
 	print(`Chance of winning if you stand: ${asPercent(odds.chanceOnStand)}`);
 	print(`Chance of winning if you hit: ${asPercent(odds.chanceOnHit)}`);
 
-	if (odds.chanceOnHit > odds.chanceOnStand) {
-		print(`Recommendation: HIT`);
+	if (dealtCards.length === 0) {
+		if (odds.chanceOfPlayerWin < 0.5) {
+			print("Recommendation: GO away and solve a mystery.");
+			print("Or, click the cards you've been dealt.");
+		} else {
+			print("Click the cards you've been dealt.");
+		}
+	} else if (odds.chanceOnHit > odds.chanceOnStand) {
+		print("Recommendation: HIT");
 	} else {
-		print(`Recommendation: STAND`);
+		print("Recommendation: STAND");
 	}
 }
 
