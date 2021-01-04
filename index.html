@@ -53,15 +53,30 @@ function main () {
 
 	print("Analyzing probabilities. Please wait...");
 
+	performance.mark("begin-caching");
+
 	// Compute the win probability of the initial state, to hydrate the cache.
-	// There are only ~6.9k nontrivial states, so this shouldn't take long.
-	// In fact, on my machine it's so fast I can't see the loading message.
+	// There are <10k nontrivial states, so this shouldn't take long.
 	computeOdds(INITIAL_DECK, 0, false, 0);
+
+	performance.mark("caching-complete");
 
 	const board = document.getElementById("board");
 	INITIAL_DECK.forEach(value => board.appendChild(createCardElement(value)));
 
 	printAnalysis([]);
+
+	performance.mark("board-rendered");
+
+	// Currently, page load takes 30-50ms "in all" on my machine.
+	let cacheSize = Object.keys(PROBABILITY_CACHE).length;
+	console.debug(`Cached ${cacheSize} possible game states`);
+	performance.measure("populating cache", "begin-caching", "caching-complete");
+	performance.measure("creating elements", "caching-complete", "board-rendered");
+	performance.measure("in all");
+	performance.getEntriesByType("measure").forEach(measure => {
+		console.debug(`Time spent ${measure.name}: ${measure.duration}ms`);
+	});
 }
 
 /**
